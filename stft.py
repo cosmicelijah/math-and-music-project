@@ -9,6 +9,43 @@ from scipy.fftpack import fft, fftshift
 import scipy
 
 filepath = None
+comma = 1.021678153 # Just something I noticed, unsure if it makes sense in theory
+
+def round_notes(notes):
+  for i, note in enumerate(notes):
+    notes[i] = round(note * comma)
+
+def notenames(notes):
+  note_names = []
+  for i, note in enumerate(notes):
+    midi = 69 + 12 * np.log2(note / 440)
+    octave = midi // 12 - 1
+    pitch = midi % 12
+    if pitch == 0:
+      note_names.append("C" + str(int(octave)))
+    elif pitch == 1:
+      note_names.append("C#" + str(int(octave)))
+    elif pitch == 2:
+      note_names.append("D" + str(int(octave)))
+    elif pitch == 3:
+      note_names.append("D#" + str(int(octave)))
+    elif pitch == 4:
+      note_names.append("E" + str(int(octave)))
+    elif pitch == 5:
+      note_names.append("F" + str(int(octave)))
+    elif pitch == 6:
+      note_names.append("F#" + str(int(octave)))
+    elif pitch == 7:
+      note_names.append("G" + str(int(octave)))
+    elif pitch == 8:
+      note_names.append("G#" + str(int(octave)))
+    elif pitch == 9:
+      note_names.append("A" + str(int(octave)))
+    elif pitch == 10:
+      note_names.append("A#" + str(int(octave)))
+    elif pitch == 11:
+      note_names.append("B" + str(int(octave)))
+  return note_names
 
 def open_file():
   # filepath = "./wavs/a440.wav"
@@ -45,15 +82,26 @@ def open_file():
   plt.ylim(0, 2000)
   plt.show()
 
-  # Get the peak frequency and magnitude for every second 
+  # Get the peak frequency and magnitude only when it has changed
+  notes = []
   interval = 2
+  last_peak_freq = None
   for i, time in enumerate(t):
     if i % (samplerate // 1024 * interval) == 0:
       magnitude_spectrum = np.abs(Zxx[:, i])
       peak_idx = np.argmax(magnitude_spectrum)
       peak_freq = f[peak_idx]
       peak_magnitude = magnitude_spectrum[peak_idx]
-      print("Time: {:.3f}s, Frequency: {:.3f}Hz, Magnitude: {:.3f}".format(time, peak_freq, peak_magnitude))
+      if last_peak_freq is None or peak_freq != last_peak_freq:
+        notes.append(peak_freq)
+        print("Time: {:.3f}s, Frequency: {:.3f}Hz, Magnitude: {:.3f}".format(time, peak_freq, peak_magnitude))
+        last_peak_freq = peak_freq
+
+  round_notes(notes)
+  note_names = notenames(notes)
+  print("Notes:", note_names)
+
+  # Write to sheet music
 
 
 
