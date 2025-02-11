@@ -125,14 +125,16 @@ def open_file():
     interval = 2
     last_peak_freq = None
     for i in range(len(t)):
-      # if i % (samplerate // 44100 * interval) == 0:
+      if i % (samplerate // 4096 * interval) == 0:
         magnitude_spectrum = np.abs(Zxx[:, i])
         fundamental_freq = quadratic_interpolation(magnitude_spectrum, f)
+        print(fundamental_freq)
         # hps_spectrum, fundamental_freq = harmonic_product_spectrum_stft(magnitude_spectrum, samplerate)
 
         # Apply a threshold to filter out noise
         peak_magnitude = np.max(magnitude_spectrum)
         if peak_magnitude < 0.01:
+          print("skipped", fundamental_freq)
           continue
 
         if last_peak_freq is None or abs(fundamental_freq - last_peak_freq) > 1: 
