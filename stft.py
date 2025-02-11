@@ -10,8 +10,23 @@ import scipy
 
 filepath = None
 
+def harmonic_product_spectrum_stft(magnitude, fs, num_harmonics=5):
+  # Multiply the original spectrum by downsampled versions (harmonics)
+  N = magnitude.shape[0]  # Number of frequency bins
+  spectrum_product = np.copy(magnitude)
+  
+  for i in range(2, num_harmonics + 1):
+    downsampled_spectrum = np.zeros(N)
+    downsampled_spectrum[::i] = magnitude[::i]  # Downsample
+    spectrum_product[:len(downsampled_spectrum)] *= downsampled_spectrum
+  
+  # Find peak corresponding to fundamental frequency
+  peak_index = np.argmax(spectrum_product[1:]) + 1  # Ignore DC component
+  fundamental_freq = fs * peak_index / N  # Convert index to frequency
+  return spectrum_product, fundamental_freq
+
 def get_closest_note(frequency, tolerance=3):
-    standard_notes = [16.35160 * (2 ** (i / 12)) for i in range(88)]  # Piano range
+    standard_notes = [27.5 * (2 ** (i / 12)) for i in range(88)]  # Piano range
 
     closest_note = min(standard_notes, key=lambda x: abs(x - frequency))
     if abs(closest_note - frequency) <= tolerance:
@@ -84,7 +99,8 @@ def open_file():
         print("Incorrect file type")
         return
 
-    data, samplerate = sf.read(filepath)
+    stereo_data, samplerate = sf.read(filepath, always_2d=True) # Always read as stereo, even if mono
+    data = stereo_data.mean(axis=1) # Average channels if stereo
     data_size = data.shape[0]
     song_length_seconds = data_size / samplerate
 
@@ -92,7 +108,9 @@ def open_file():
     print("Sample rate:", samplerate)
     print("Song length:", song_length_seconds, "seconds")
 
-    f, t, Zxx = scipy.signal.stft(data, samplerate, nperseg=1024)
+    # print(data)
+
+    f, t, Zxx = scipy.signal.stft(data, samplerate, nperseg=4096)
 
     plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud')
     plt.title('STFT Magnitude')
@@ -106,19 +124,20 @@ def open_file():
     notes = []
     interval = 2
     last_peak_freq = None
-    for i, time in enumerate(t):
-        if i % (samplerate // 1024 * interval) == 0:
-            magnitude_spectrum = np.abs(Zxx[:, i])
-            peak_freq = quadratic_interpolation(magnitude_spectrum, f)
+    for i in range(len(t)):
+      # if i % (samplerate // 44100 * interval) == 0:
+        magnitude_spectrum = np.abs(Zxx[:, i])
+        fundamental_freq = quadratic_interpolation(magnitude_spectrum, f)
+        # hps_spectrum, fundamental_freq = harmonic_product_spectrum_stft(magnitude_spectrum, samplerate)
 
-            # Apply a threshold to filter out noise
-            peak_magnitude = np.max(magnitude_spectrum)
-            if peak_magnitude < 0.01:
-                continue
+        # Apply a threshold to filter out noise
+        peak_magnitude = np.max(magnitude_spectrum)
+        if peak_magnitude < 0.01:
+          continue
 
-            if last_peak_freq is None or abs(peak_freq - last_peak_freq) > 1: 
-                notes.append(peak_freq)
-                last_peak_freq = peak_freq
+        if last_peak_freq is None or abs(fundamental_freq - last_peak_freq) > 1: 
+          notes.append(fundamental_freq)
+          last_peak_freq = fundamental_freq
 
     note_names = notenames(notes)
     print("Notes:", note_names)
