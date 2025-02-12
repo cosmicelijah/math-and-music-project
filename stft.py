@@ -67,7 +67,17 @@ def open_file():
     return
 
   stereo_data, samplerate = sf.read(filepath, always_2d=True)  # Always read as stereo, even if mono
+
+
   data = stereo_data.mean(axis=1)  # Average channels if stereo
+  time = np.arange(0, len(data)) / samplerate  # Time vector
+  plt.figure(figsize=(10, 6))
+  plt.plot(time, data)
+  plt.title("Waveform of Audio Signal")
+  plt.xlabel("Time [s]")
+  plt.ylabel("Amplitude")
+  plt.grid(True)
+  plt.show()
   data = low_pass_filter(data)
   data_size = data.shape[0]
   song_length_seconds = data_size / samplerate
