@@ -6,21 +6,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 from math import log2, pow
+from scipy.signal import butter, filtfilt
 
 filepath = None
 
-def harmonic_product_spectrum_stft(magnitude, fs, num_harmonics=5):
-  N = magnitude.shape[0]  # Number of frequency bins
-  spectrum_product = np.copy(magnitude)
-  
-  for i in range(2, num_harmonics + 1):
-    downsampled_spectrum = np.zeros(N)
-    downsampled_spectrum[::i] = magnitude[::i]  # Downsample
-    spectrum_product[:len(downsampled_spectrum)] *= downsampled_spectrum
-  
-  peak_index = np.argmax(spectrum_product[1:]) + 1  # Ignore DC component
-  fundamental_freq = fs * peak_index / N  # Convert index to frequency
-  return spectrum_product, fundamental_freq
+
+def low_pass_filter(data, cutoff=3000, samplerate=44100, order=5):
+    nyquist = 0.5 * samplerate
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='low', analog=False)
+    return filtfilt(b, a, data)
 
 def get_closest_note(frequency, tolerance=3):
   standard_notes = [27.5 * (2 ** (i / 12)) for i in range(88)]  # Piano range
@@ -43,19 +38,19 @@ def notenames(notes):
   return note_names
 
 def quadratic_interpolation(magnitude_spectrum, freqs):
-  k = np.argmax(magnitude_spectrum)
-  if k == 0 or k == len(magnitude_spectrum) - 1:
-    return freqs[k] 
+    peak_idx = np.argmax(magnitude_spectrum)
+    if peak_idx == 0 or peak_idx == len(magnitude_spectrum) - 1:
+        return freqs[peak_idx]  # Edge case
 
-  alpha = magnitude_spectrum[k - 1]
-  beta = magnitude_spectrum[k]
-  gamma = magnitude_spectrum[k + 1]
-
-  delta = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma)
-
-  refined_freq = freqs[k] + delta * (freqs[1] - freqs[0])  # Scale by bin width
-
-  return refined_freq
+    # Quadratic interpolation formula
+    alpha = magnitude_spectrum[peak_idx - 1]
+    beta = magnitude_spectrum[peak_idx]
+    gamma = magnitude_spectrum[peak_idx + 1]
+    
+    delta = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma)
+    refined_freq = freqs[peak_idx] + delta * (freqs[1] - freqs[0])  
+    
+    return refined_freq
 
 def open_file():
   filepath = filedialog.askopenfilename(
@@ -73,6 +68,7 @@ def open_file():
 
   stereo_data, samplerate = sf.read(filepath, always_2d=True)  # Always read as stereo, even if mono
   data = stereo_data.mean(axis=1)  # Average channels if stereo
+  data = low_pass_filter(data)
   data_size = data.shape[0]
   song_length_seconds = data_size / samplerate
 
@@ -93,7 +89,7 @@ def open_file():
   notes = []
   durations = []
   start_time = None
-  last_peak_freq = None
+  last_note = None # Ensure no duplicate notes from weird waveform issues
   interval = 0.1
   note_active = False 
 
@@ -106,13 +102,15 @@ def open_file():
       if peak_magnitude < 0.01 or fundamental_freq < 27.5 or fundamental_freq > 4000:
         continue
 
-      if last_peak_freq is None or abs(fundamental_freq - last_peak_freq) > 4: 
+      snapped_note = get_closest_note(fundamental_freq)
+      current_note = notenames([snapped_note])[0]
+      if last_note is None or last_note != current_note: 
         if note_active:
           durations.append([round(start_time, 2), round(t[i], 2)])
 
         notes.append(fundamental_freq)
         start_time = t[i] 
-        last_peak_freq = fundamental_freq
+        last_note = current_note
         note_active = True
 
   if note_active:
